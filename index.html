@@ -365,6 +365,32 @@
     </div>
   </div>
 
+   <div id="editRequestsView" style="display:none;">
+    <div class="card" id="editRequestsLockCard">
+      <h2>طلبات التعديل محمية بكلمة سر</h2>
+      <p class="muted">أدخل كلمة السر عشان تقدر توافق أو ترفض طلبات تعديل الجرد</p>
+      <div class="row" style="grid-template-columns: 1fr auto; align-items:end; margin-top:10px;">
+        <div>
+          <label>كلمة السر</label>
+          <input type="password" id="editRequestsPasswordInput" placeholder="كلمة السر" onkeypress="if(event.key==='Enter') unlockEditRequests()">
+        </div>
+        <button class="primary" onclick="unlockEditRequests()">دخول</button>
+      </div>
+      <p class="muted" id="editRequestsPasswordError" style="display:none; color:#A32D2D;">كلمة السر غير صحيحة، حاول تاني.</p>
+    </div>
+ 
+    <div id="editRequestsContent" style="display:none;">
+      <div class="card" id="editRequestsCard">
+        <div class="row" style="grid-template-columns: 1fr auto; align-items:center; margin-bottom:0;">
+          <h2 style="margin:0;">طلبات تعديل الجرد (محتاجة موافقة)</h2>
+          <button class="ghost" onclick="loadEditRequests()">تحديث</button>
+        </div>
+        <p class="muted" style="margin-top:8px;">أي تعديل على جرد مُرسل بيتحول لطلب باسم اللي عمله، ومبيتفعّلش غير بعد الموافقة عليه هنا.</p>
+        <div id="editRequestsWrap"><p class="empty">جاري التحميل...</p></div>
+      </div>
+    </div>
+  </div>
+   
   <div id="transfersAdminView" style="display:none;">
     <div class="card" id="transfersAdminLockCard">
       <h2>لوحة التحويلات محمية بكلمة سر</h2>
@@ -1395,6 +1421,7 @@ function switchTab(tab) {
   setDisplay('receiveTransfersView', tab === 'receiveTransfers' ? 'block' : 'none');
   setDisplay('printBlankView', tab === 'printBlank' ? 'block' : 'none');
   setDisplay('adminView', tab === 'admin' ? 'block' : 'none');
+ setDisplay('editRequestsView', tab === 'editRequests' ? 'block' : 'none');
   setDisplay('transfersAdminView', tab === 'transfersAdmin' ? 'block' : 'none');
   setDisplay('manageView', tab === 'manage' ? 'block' : 'none');
   setDisplay('usersView', tab === 'users' ? 'block' : 'none');
@@ -1407,6 +1434,7 @@ function switchTab(tab) {
   toggleActive('tabReceiveTransfersBtn', tab === 'receiveTransfers');
   toggleActive('tabPrintBlankBtn', tab === 'printBlank');
   toggleActive('tabAdminBtn', tab === 'admin');
+ toggleActive('tabEditRequestsBtn', tab === 'editRequests');
   toggleActive('tabTransfersAdminBtn', tab === 'transfersAdmin');
   toggleActive('tabManageBtn', tab === 'manage');
   toggleActive('tabUsersBtn', tab === 'users');
@@ -1418,6 +1446,7 @@ function switchTab(tab) {
   if (tab === 'receiveTransfers') renderReceiveTransfersGate();
   if (tab === 'printBlank') renderPrintBlankCategoryChips();
   if (tab === 'admin') renderAdminGate();
+ if (tab === 'editRequests') renderEditRequestsGate();
   if (tab === 'transfersAdmin') renderTransfersAdminGate();
   if (tab === 'manage') renderManageGate();
   if (tab === 'users') renderUsersGate();
@@ -2800,7 +2829,206 @@ function printBlankInventorySheet() {
   `;
   window.print();
 }
-function renderManageGate() {
+function renderEditRequestsGate() {
+  if (editRequestsUnlocked) {
+    document.getElementById('editRequestsLockCard').style.display = 'none';
+    document.getElementById('editRequestsContent').style.display = 'block';
+    loadEditRequests();
+  } else {
+    document.getElementById('editRequestsLockCard').style.display = 'block';
+    document.getElementById('editRequestsContent').style.display = 'none';
+  }
+}
+ 
+function unlockEditRequests() {
+  const val = document.getElementById('editRequestsPasswordInput').value;
+  const err = document.getElementById('editRequestsPasswordError');
+  if (val === sectionPasswords.editRequests) {
+    editRequestsUnlocked = true;
+    document.getElementById('editRequestsPasswordInput').value = '';
+    err.style.display = 'none';
+    renderEditRequestsGate();
+  } else {
+    err.style.display = 'block';
+  }
+}
+ 
+async function loadEditRequests() {
+  const wrap = document.getElementById('editRequestsWrap');
+  if (!wrap) return;
+  try {
+    const res = await gsGet('juice_editrequests:list');
+    editRequests = (res && res.value) ? JSON.parse(res.value) : [];
+  } catch (e) {
+    wrap.innerHTML = '<p class="empty">تعذر تحميل طلبات التعديل.</p>';
+    return;
+  }
+  renderEditRequests();
+}
+ 
+function toggleEditRequestDetails(id) {
+  expandedEditRequestId = (expandedEditRequestId === id) ? null : id;
+  renderEditRequests();
+}
+ 
+function buildEditRequestDiffHtml(req) {
+  const oldItems = {};
+  (req.oldData.items || []).forEach(it => { oldItems[it.name] = it; });
+  const newItems = {};
+  (req.newData.items || []).forEach(it => { newItems[it.name] = it; });
+ 
+  const allNames = new Set([...Object.keys(oldItems), ...Object.keys(newItems)]);
+  const changes = [];
+  allNames.forEach(name => {
+    const oldIt = oldItems[name];
+    const newIt = newItems[name];
+    const oldQty = oldIt ? oldIt.qty : 0;
+    const newQty = newIt ? newIt.qty : 0;
+    if (oldQty !== newQty) {
+      changes.push({
+        name,
+        unit: (newIt || oldIt).unit,
+        price: (newIt || oldIt).price,
+        oldQty, newQty,
+        status: !oldIt ? 'صنف جديد' : (!newIt ? 'اتحذف' : 'اتغيّرت الكمية')
+      });
+    }
+  });
+ 
+  if (changes.length === 0) {
+    return '<p class="empty">مفيش فرق في الأصناف بين القديم والجديد.</p>';
+  }
+ 
+  let html = '<table><thead><tr><th>الصنف</th><th>الكمية القديمة</th><th>الكمية الجديدة</th><th>الوحدة</th><th>الحالة</th></tr></thead><tbody>';
+  changes.forEach(c => {
+    html += `<tr><td>${c.name}</td><td class="num">${c.oldQty}</td><td class="num" style="font-weight:700;">${c.newQty}</td><td>${c.unit}</td><td style="font-size:12px;">${c.status}</td></tr>`;
+  });
+  html += `</tbody></table>
+    <p class="muted" style="margin-top:8px;">إجمالي القيمة القديم: <b>${Math.round((req.oldTotalValue || 0) * 100) / 100}</b> — إجمالي القيمة الجديد: <b>${Math.round((req.newTotalValue || 0) * 100) / 100}</b></p>`;
+  return html;
+}
+ 
+function renderEditRequests() {
+  const wrap = document.getElementById('editRequestsWrap');
+  if (!wrap) return;
+  if (!editRequests.length) { wrap.innerHTML = '<p class="empty">مفيش طلبات تعديل لسه.</p>'; return; }
+ 
+  const statusLabel = { pending: 'محتاج موافقة', approved: 'تمت الموافقة', rejected: 'مرفوض' };
+  const statusClass = { pending: 'status-no', approved: 'status-yes', rejected: 'status-no' };
+ 
+  let html = '<table><thead><tr><th>الفرع</th><th>تاريخ الجرد</th><th>القائم بالتعديل</th><th>وقت الطلب</th><th>الحالة</th><th></th></tr></thead><tbody>';
+  editRequests.forEach(r => {
+    const isExpanded = expandedEditRequestId === r.id;
+    html += `<tr>
+      <td>${r.branch}</td>
+      <td>${r.date}</td>
+      <td>${r.editorName}</td>
+      <td style="font-size:12px;">${r.createdAt ? new Date(r.createdAt).toLocaleString('ar-EG') : '-'}</td>
+      <td><span class="status-pill ${statusClass[r.status] || 'status-no'}">${statusLabel[r.status] || r.status}</span></td>
+      <td style="white-space:nowrap;">
+        <button class="link-btn" onclick="toggleEditRequestDetails(${r.id})">${isExpanded ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}</button>
+        ${r.status === 'pending' ? `
+          <button class="link-btn" onclick="decideEditRequest(${r.id}, 'approved')">موافقة</button>
+          <button class="link-btn" style="color:#A32D2D;" onclick="decideEditRequest(${r.id}, 'rejected')">رفض</button>
+        ` : ''}
+      </td>
+    </tr>`;
+    if (isExpanded) {
+      html += `<tr><td colspan="6" style="background:#F7F7F7; padding:14px;">${buildEditRequestDiffHtml(r)}</td></tr>`;
+    }
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+ 
+async function decideEditRequest(id, decision) {
+  const req = editRequests.find(r => r.id === id);
+  if (!req) return;
+ 
+  const ownerPassword = prompt('اكتب كلمة سر صاحب النظام لتأكيد القرار:');
+  if (ownerPassword === null) return;
+  if (ownerPassword !== currentAdminPassword) { alert('كلمة السر غلط، اتلغت العملية.'); return; }
+ 
+  if (decision === 'approved') {
+    const key = `juice_count:${req.date}:${slugify(req.branch)}`;
+    try {
+      const ok = await gsSet(key, JSON.stringify(req.newData));
+      if (!ok) throw new Error();
+    } catch (e) {
+      alert('حصل خطأ أثناء تطبيق التعديل، الطلب لسه محتاج موافقة وحاول تاني.');
+      return;
+    }
+    lastSubmittedData[req.branch] = req.newData;
+    if (currentDetailBranch === req.branch) renderBranchDetailView();
+  }
+ 
+  req.status = decision;
+  try {
+    const ok = await gsSet('juice_editrequests:list', JSON.stringify(editRequests));
+    if (!ok) throw new Error();
+  } catch (e) {
+    alert('تم تطبيق التعديل لكن حصل خطأ في تحديث حالة الطلب، حدّث الصفحة.');
+  }
+  loadEditRequests();
+}
+ 
+function startEditBranchInvoice() {
+  if (editingBranchInvoice) {
+    editingBranchInvoice = false;
+    renderBranchDetailView();
+    return;
+  }
+  const data = lastSubmittedData[currentDetailBranch];
+  if (!data) return;
+  editingBranchInvoiceItems = data.items.map(it => ({ ...it }));
+  editingBranchInvoice = true;
+  renderBranchDetailView();
+}
+ 
+async function saveEditedBranchInvoice() {
+  const data = lastSubmittedData[currentDetailBranch];
+  if (!data) return;
+ 
+  const editorName = (prompt('اكتب اسمك (القائم بالتعديل) عشان يتبعت طلب التعديل للموافقة:') || '').trim();
+  if (!editorName) { alert('لازم تكتب اسم القائم بالتعديل عشان يتبعت طلب التعديل.'); return; }
+ 
+  const totalValue = editingBranchInvoiceItems.reduce((s, r) => s + (r.qty * r.price), 0);
+  const updated = { ...data, items: editingBranchInvoiceItems, totalValue: Math.round(totalValue * 100) / 100 };
+ 
+  const newRequest = {
+    id: Date.now(),
+    branch: currentDetailBranch,
+    date: data.date,
+    editorName,
+    oldData: data,
+    newData: updated,
+    oldTotalValue: data.totalValue || 0,
+    newTotalValue: updated.totalValue,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  };
+ 
+  try {
+    let current = [];
+    try {
+      const res = await gsGet('juice_editrequests:list');
+      current = (res && res.value) ? JSON.parse(res.value) : [];
+    } catch (e) { current = []; }
+    current.push(newRequest);
+ 
+    const ok = await gsSet('juice_editrequests:list', JSON.stringify(current));
+    if (!ok) throw new Error();
+    editRequests = current;
+    editingBranchInvoice = false;
+    renderBranchDetailView();
+    loadEditRequests();
+    alert(`تم إرسال طلب تعديل جرد "${currentDetailBranch}" باسم "${editorName}"، وهيتطبق بعد ما يوافق عليه صاحب النظام.`);
+  } catch (e) {
+    alert('حصل خطأ أثناء إرسال طلب التعديل، حاول تاني.');
+  }
+}
+ 
+ function renderManageGate() {
   if (manageUnlocked) {
     document.getElementById('manageLockCard').style.display = 'none';
     document.getElementById('manageContent').style.display = 'block';
@@ -3818,61 +4046,6 @@ function renderBranchDetailView() {
       const match = inventoryItems.find(it => it.name === document.getElementById('editAddItemInput').value);
       document.getElementById('editAddItemUnit').value = match ? match.unit : '';
     });
-  }
-}
-
-function startEditBranchInvoice() {
-  if (editingBranchInvoice) {
-    editingBranchInvoice = false;
-    renderBranchDetailView();
-    return;
-  }
-  const data = lastSubmittedData[currentDetailBranch];
-  if (!data) return;
-  editingBranchInvoiceItems = data.items.map(it => ({ ...it }));
-  editingBranchInvoice = true;
-  renderBranchDetailView();
-}
-
-function updateEditBranchInvoiceQty(idx, valueStr) {
-  const qty = parseFloat(valueStr);
-  if (!editingBranchInvoiceItems[idx]) return;
-  editingBranchInvoiceItems[idx].qty = (!valueStr || isNaN(qty) || qty < 0) ? 0 : qty;
-  renderBranchDetailView();
-}
-
-function updateEditBranchInvoiceField(idx, field, value) {
-  if (!editingBranchInvoiceItems[idx]) return;
-  if (field === 'price') {
-    const p = parseFloat(value);
-    editingBranchInvoiceItems[idx].price = isNaN(p) ? 0 : p;
-  } else if (field === 'unit') {
-    editingBranchInvoiceItems[idx].unit = value.trim() || '-';
-  } else if (field === 'category') {
-    editingBranchInvoiceItems[idx].category = value;
-  }
-  renderBranchDetailView();
-}
-
-async function promoteItemToCatalog(idx) {
-  const it = editingBranchInvoiceItems[idx];
-  if (!it) return;
-  if (inventoryItems.find(x => x.name === it.name)) {
-    alert('الصنف ده موجود بالفعل في القائمة الرسمية.');
-    it.custom = false;
-    renderBranchDetailView();
-    return;
-  }
-  const newItem = { name: it.name, unit: it.unit, price: it.price || 0, category: it.category || 'أخرى' };
-  inventoryItems.push(newItem);
-  const ok = await saveInventoryCatalog();
-  if (ok) {
-    it.custom = false;
-    renderBranchDetailView();
-    alert(`تمت إضافة "${it.name}" للقائمة الرسمية بنجاح.`);
-  } else {
-    inventoryItems.pop();
-    alert('حصل خطأ أثناء الإضافة، حاول تاني.');
   }
 }
 
