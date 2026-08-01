@@ -754,6 +754,8 @@ let sectionPasswords = { admin: "Moustafa", manage: "Moustafa", users: "Moustafa
 
 // نظام تخصيص التبويبات: ترتيب وأسماء قابلة للتغيير من الإعدادات
 let currentAdminGroup = null;
+let editRequests = [];
+let editRequestsUnlocked = false;
 let branchTabs = [
   { id: 'count', label: 'تسجيل جرد فرع' },
   { id: 'transfers', label: 'تحويلات بين الفروع' },
@@ -762,7 +764,8 @@ let branchTabs = [
 ];
 let adminTabs = [
   { id: 'admin', label: 'لوحة الجرد', group: 'Operation' },
-  { id: 'transfersAdmin', label: 'لوحة التحويلات', group: 'Operation' },
+  { id: 'editRequests', label: 'طلبات التعديل', group: 'Operation' },
+  { id: 'transfersAdmin', label: 'لوحة التحويلات', group: 'Operation' 
   { id: 'manage', label: 'إدارة الأصناف', group: 'Accountant' },
   { id: 'users', label: 'المستخدمين', group: 'Accountant' },
   { id: 'settings', label: 'الإعدادات', group: 'Accountant' },
@@ -772,7 +775,7 @@ let adminTabs = [
 ];
 const TAB_BUTTON_ID = {
   count: 'tabCountBtn', transfers: 'tabTransfersBtn', receiveTransfers: 'tabReceiveTransfersBtn', printBlank: 'tabPrintBlankBtn',
-  admin: 'tabAdminBtn', transfersAdmin: 'tabTransfersAdminBtn', manage: 'tabManageBtn',
+  admin: 'tabAdminBtn', editRequests: 'tabEditRequestsBtn', transfersAdmin: 'tabTransfersAdminBtn', manage: 'tabManageBtn',
   users: 'tabUsersBtn', settings: 'tabSettingsBtn', cost: 'tabCostBtn',
   newItems: 'tabNewItemsBtn', deleteRecords: 'tabDeleteRecordsBtn'
 };
